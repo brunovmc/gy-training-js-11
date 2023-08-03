@@ -1,7 +1,6 @@
 const express = require('express');
 const fs = require('fs');
 const csvParser = require('csv-parser');
-const path = require('path');
 
 const app = express();
 const port = 3000;
@@ -16,46 +15,47 @@ function parseDateTime(dateTimeString) {
 }
 
 function calculateWeeklyAggregation(file) {
-  const weeklyAggregation = {};
+  const weeklyData = {};
   const alarmThreshold = 1;
+  let currentWeekStart = new Date('2023-01-06T08:45:00');
 
   fs.createReadStream(file)
     .pipe(csvParser({ separator: ';' }))
     .on('data', (row) => {
       const date = parseDateTime(row.dateTime);
-      date.setHours(0, 0, 0, 0);
 
-      const firstDayOfWeek = new Date(date);
-      firstDayOfWeek.setDate(date.getDate() - date.getDay());
+      if (date >= currentWeekStart && date < new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+        const isoDateString = currentWeekStart.toISOString().split('T')[0];
+        const value = parseFloat(row.value);
 
-      const isoDateString = firstDayOfWeek.toISOString().split('T')[0];
+        if (!isNaN(value)) {
+          if (weeklyData[isoDateString]) {
+            weeklyData[isoDateString].sum += value;
+            weeklyData[isoDateString].count++;
 
-      const value = parseFloat(row.value);
-
-      if (!isNaN(value)) {
-        if (weeklyAggregation[isoDateString]) {
-          weeklyAggregation[isoDateString].sum += value;
-          weeklyAggregation[isoDateString].count++;
-
-          if (value > alarmThreshold) {
-            weeklyAggregation[isoDateString].alarmCount++;
+            if (value > alarmThreshold) {
+              weeklyData[isoDateString].alarmCount++;
+            }
+          } else {
+            weeklyData[isoDateString] = { sum: value, count: 1, alarmCount: value > alarmThreshold ? 1 : 0 };
           }
-        } else {
-          weeklyAggregation[isoDateString] = { sum: value, count: 1, alarmCount: value > alarmThreshold ? 1 : 0 };
         }
+      } else if (date >= new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+        currentWeekStart = new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
       }
     })
     .on('end', () => {
       console.log("Weekly Aggregation Report:");
-      for (const date in weeklyAggregation) {
-        weeklyAggregation[date].average = weeklyAggregation[date].sum / weeklyAggregation[date].count;
-        console.log(`${date} - Weekly Average: ${weeklyAggregation[date].average.toFixed(2)} - Alarms Triggered: ${weeklyAggregation[date].alarmCount}`);
+      for (const weekStartDate in weeklyData) {
+        const { sum, count, alarmCount } = weeklyData[weekStartDate];
+        const weeklyAverage = sum / count;
+        console.log(`${weekStartDate} - Weekly Average: ${weeklyAverage.toFixed(2)} - Alarms Triggered: ${alarmCount}`);
       }
     });
 }
 
 app.get('/generate-report', (req, res) => {
-  const file = path.join(__dirname, 'METRICS_REPORT-1673351714089 (2).csv');
+  const file = 'METRICS_REPORT-1673351714089 (2).csv';
   calculateWeeklyAggregation(file);
 
   res.send("Weekly Aggregation Report generated and logged in the console.");

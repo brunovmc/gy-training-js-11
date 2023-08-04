@@ -65,7 +65,7 @@ function parseDateTime(dateTimeString) {
 
 app.get('/generate-report', async (req, res) => {
   const file = 'METRICS_REPORT-1673351714089 (2).csv';
-  calculateWeeklyAggregation(file);
+  await calculateWeeklyAggregation(file);
   res.send("Weekly Aggregation Report generated and logged in the console.");
 });
 
